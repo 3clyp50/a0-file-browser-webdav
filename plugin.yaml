@@ -1,0 +1,8 @@
+name: file_browser_webdav
+title: File Browser WebDAV access
+description: Connect remote storage to Agent Zero Files with per-connection permissions.
+version: 0.1.0
+settings_sections:
+  - external
+per_project_config: false
+per_agent_config: false

@@ -1,0 +1,16 @@
+<html>
+<head>
+  <title>File Browser WebDAV access</title>
+  <script type="module" src="/plugins/file_browser_webdav/webui/config-store.js"></script>
+</head>
+<body>
+  <div x-data>
+    <template x-if="$store.file_browser_webdav">
+      <div class="field field-full">
+        <div class="field-description">Manage saved connections and allowed actions in File Browser Settings.</div>
+        <button class="btn btn-ok" type="button" @click="$store.file_browser_webdav.open()">Open connection settings</button>
+      </div>
+    </template>
+  </div>
+</body>
+</html>
