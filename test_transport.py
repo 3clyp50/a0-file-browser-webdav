@@ -1,4 +1,5 @@
 """Real HTTPS/Basic-auth WebDAV round trip using a disposable local server."""
+import io
 import base64
 import hashlib
 import http.server
@@ -75,12 +76,30 @@ class TransportTest(unittest.TestCase):
                 config=provider.validate(dict(url=f"https://localhost:{server.server_port}/dav/", username="test",password="password",ca_file=str(certificate)))
                 with provider.open(config,root) as fs:
                     self.assertEqual(fs.list("")[0]["name"],"code.py")
-                    data, revision=fs.read("code.py",100)
+                    output = io.BytesIO()
+                    revision = fs.read("code.py", output, 100)
+                    data = output.getvalue()
                     self.assertEqual(data,b"print(1)")
-                    fs.write("code.py",b"print(2)",expected=revision)
-                    with self.assertRaises(ValueError): fs.write("code.py",b"stale",expected=revision)
-                    with self.assertRaises(ValueError): fs.write("code.py",b"overwrite")
-                    with self.assertRaises(ValueError): fs.read("code.py",1)
+                    fs.write("code.py", io.BytesIO(b"print(2)"),expected=revision)
+                    with self.assertRaises(ValueError): fs.write("code.py", io.BytesIO(b"stale"),expected=revision)
+                    with self.assertRaises(ValueError): fs.write("code.py", io.BytesIO(b"overwrite"))
+                    with self.assertRaises(ValueError): fs.read("code.py", io.BytesIO(), 1)
+                    large = b"x" * (2 * 1024 * 1024 + 17)
+                    with tempfile.TemporaryFile() as source:
+                        source.write(large)
+                        source.seek(0)
+                        revision = fs.write("large.txt", source)
+                    output = io.BytesIO()
+                    self.assertEqual(fs.read("large.txt", output, len(large)), revision)
+                    self.assertEqual(output.getvalue(), large)
+                    with self.assertRaises(ValueError):
+                        fs.read("large.txt", io.BytesIO(), len(large) - 1)
+                    fs.write("large.txt", io.BytesIO(b"updated"), expected=revision)
+                    self.assertEqual(content["/dav/large.txt"], b"updated")
+                    fs.write("empty.txt", io.BytesIO())
+                    self.assertEqual(content["/dav/empty.txt"], b"")
+                    fs.remove("empty.txt")
+                    fs.remove("large.txt")
                     fs.rename("code.py","renamed.py")
                     fs.remove("renamed.py")
                     self.assertFalse(content)

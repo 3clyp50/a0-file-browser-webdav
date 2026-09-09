@@ -7,6 +7,8 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 import requests
 from defusedxml import ElementTree
 
+from helpers.file_transfers import TransferWriter
+
 DAV = "{DAV:}"
 
 
@@ -113,18 +115,16 @@ class WebDAV:
         return [item for item in self.entries(relative, 1)
                 if item["path"] != relative.strip("/") and posixpath.dirname(item["path"]) == relative.strip("/")]
 
-    def read(self, relative, limit):
+    def read(self, relative, destination, limit):
         with self.request("GET", relative, stream=True) as response:
-            if int(response.headers.get("Content-Length", 0)) > limit:
+            if limit is not None and int(response.headers.get("Content-Length", 0)) > limit:
                 raise ValueError("File exceeds the size limit.")
-            data = bytearray()
+            output = TransferWriter(destination, limit)
             for chunk in response.iter_content(65536):
-                data.extend(chunk)
-                if len(data) > limit:
-                    raise ValueError("File exceeds the size limit.")
-            return bytes(data), {"etag": response.headers.get("ETag", "")}
+                output.write(chunk)
+            return {"etag": response.headers.get("ETag", "")}
 
-    def write(self, relative, content, expected=None):
+    def write(self, relative, source, expected=None):
         if expected is None:
             headers = {"If-None-Match": "*"}
         else:
@@ -132,7 +132,10 @@ class WebDAV:
             if not etag or etag.startswith("W/"):
                 raise ValueError("This server did not supply a strong ETag; safe replacement is unavailable.")
             headers = {"If-Match": etag}
-        with self.request("PUT", relative, data=content, headers=headers) as response:
+        position = source.tell()
+        empty = source.seek(0, 2) == position
+        source.seek(position)
+        with self.request("PUT", relative, data=b"" if empty else source, headers=headers) as response:
             etag = response.headers.get("ETag", "")
         return {"etag": etag} if etag else self.stat(relative)["revision"]
 
